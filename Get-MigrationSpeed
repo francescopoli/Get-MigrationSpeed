@@ -1,0 +1,176 @@
+function Get-MigrationSpeed {
+    param(
+        [Parameter(ParameterSetName='export')]
+            [switch]$ExportCSV,
+            [string]$CSVFile = "./migration.csv",
+        [Parameter(ParameterSetName='inputfile')]
+            [switch]$XMLInput,
+            [string]$XmlFileName
+    )
+
+    function EBTo-Number{
+	     param(
+            $exoBytes
+         )
+         $fix = $exoBytes.ToString().split("(")[1].split(" ")[0].replace(",","");
+	     return [long]$fix/1024/1024;
+    }
+
+    if (!$XMLInput){
+        $x=0;
+        Write-Host "                           "
+        Write-Host "_____Migration Batches_____"
+        Write-Host "*                         *"
+        $batches = Get-MigrationBatch
+        foreach($batch in $batches){
+            Write-host ("    {0}: {1}" -f $x,$batch.identity)
+            $x++
+           }
+        Write-Host "*_________________________*"
+
+        $batchNumber = 0
+        $reAsk = $true
+        While ($reAsk){
+            $batchNumber = Read-Host "Please make your selection: "
+            if ( ( $batchNumber -gt $batches.Count-1) -or 
+                 ( $batchNumber -lt 0) ) {
+                Write-Host "Not a valid batch number, selection must be between 0 and $($batches.count)"
+            }
+            else{
+                $reAsk = $false
+                Write-Host "Batch selected: $($batches[$batchNumber].identity)" -ForegroundColor Yellow
+            }
+        }
+
+        $migrations = Get-MoveRequest -BatchName "migrationservice:$($batches[$batchNumber].identity)" |
+                        Get-MoveRequestStatistics
+    }
+    else {
+         $migrations = Import-Clixml $XmlFileName
+    }
+    $SourceServers = $migrations | Select-Object SourceServer -Unique
+    $glob_InitialSeedingCompletedTimestamp = 0
+    $glob_StartTimestamp = 0
+    $glob_totalMbxSize = 0
+    $glob_totalDataTransferred = 0
+    $glob_totalStalledTime = 0
+
+    foreach($souS in $SourceServers){
+        $migs = $migrations | where{$_.sourceServer -eq $souS.sourceserver}
+        $StartTimestamp = 0
+        $InitialSeedingCompletedTimestamp = 0
+        $totalMbxSize = 0
+        $totalDataTransferred = 0
+        $totalStalledTime
+
+        $obj = @()
+        foreach($mig in $migs){
+            #global start stop seeding
+            if ( $glob_StartTimestamp -ne 0 ){ 
+                if($mig.StartTimestamp -lt $glob_StartTimestamp ){
+                        $glob_StartTimestamp = $mig.StartTimestamp
+                }  
+            }
+            else{ 
+                $glob_StartTimestamp = $mig.StartTimestamp 
+            }
+
+            if ( $mig.InitialSeedingCompletedTimestamp -gt $glob_InitialSeedingCompletedTimestamp ) {
+                $glob_InitialSeedingCompletedTimestamp = $mig.InitialSeedingCompletedTimestamp
+            }
+
+            #local per server start stop seeding
+            if ( $StartTimestamp -ne 0 ){ 
+                if($mig.StartTimestamp -lt $StartTimestamp ){
+                        $StartTimestamp = $mig.StartTimestamp
+                }  
+            }
+            else{ 
+                $StartTimestamp = $mig.StartTimestamp 
+            }
+
+            if ( $mig.InitialSeedingCompletedTimestamp -gt $InitialSeedingCompletedTimestamp ) {
+                $InitialSeedingCompletedTimestamp = $mig.InitialSeedingCompletedTimestamp
+            }
+
+            $MbxSize = [Math]::Round((EBTo-Number $mig.TotalMailboxSize));
+            if ($MbxSize -eq 0) {$MbxSize=1}
+            $totalMbxSize += $MbxSize
+            $glob_totalMbxSize += $MbxSize
+
+
+            $DataTransferred = [Math]::Round((EBTo-Number $mig.BytesTransferred)) #this is in MB
+            $totalDataTransferred += $DataTransferred
+            $glob_totalDataTransferred += $DataTransferred
+            
+            $TotalStalledTime += 
+                $mig.TotalStalledDueToContentIndexingDuration.TotalMinutes + 
+                $mig.TotalStalledDueToMailboxLockedDuration.TotalMinutes + 
+                $mig.TotalStalledDueToReadThrottle.TotalMinutes +
+                $mig.TotalStalledDueToWriteThrottle.TotalMinutes + 
+                $mig.TotalStalledDueToReadCpu.TotalMinutes + 
+                $mig.TotalStalledDueToWriteCpu.TotalMinutes + 
+                $mig.TotalStalledDueToReadUnknown.TotalMinutes + 
+                $mig.TotalStalledDueToWriteUnknown.TotalMinutes;
+            
+            $glob_totalStalledTime += $TotalStalledTime
+
+            if ($DataTransferred -eq 0) { $DataTransferred = 1}
+            $matrix = [ordered]@{
+                "user" = $mig.alias;
+                "sourceServer" = $mig.sourceServer;
+                "TimeInMin"= $mig.TotalInProgressDuration.TotalMinutes;
+                "MbxSize" = $MbxSize;
+                "DataTransferred" = $DataTransferred; 
+                "MovePerfDataPerMinutes" = $DataTransferred / $mig.TotalInProgressDuration.TotalMinutes;
+                "MoveQuality" = $MbxSize/$DataTransferred;
+                "RemoteDatabaseName" = $mig.RemoteDatabaseName;
+                "TargetDatabase" = $mig.TargetDatabase;
+                "ItemsTransferred" = $mig.ItemsTransferred;
+                "TotalStalledTime" = $TotalStalledTime;
+                "TotalTransientFailureDuration" = $mig.TotalTransientFailureDuration.TotalMinutes;
+                "TimeToMove" = ($mig.InitialSeedingCompletedTimestamp - $mig.StartTimestamp).TotalMinutes;
+                "MBPerMinutes" = ($DataTransferred) / 
+                                 ($mig.InitialSeedingCompletedTimestamp - $mig.StartTimestamp).TotalMinutes;
+            }
+
+            if ($ExportCSV) {
+                $obj += New-Object -TypeName PSObject -Property $matrix
+            }
+        }
+       
+    
+        Write-Host " "
+        Write-Host "Server: $($souS.sourceserver)" 
+        Write-Host "____________________________________________________"
+        Write-Host "Time taken(h): $((($InitialSeedingCompletedTimestamp - $StartTimestamp).totalhours))"
+        Write-Host "Number of Mailboxes: $($migs.count)" 
+        Write-Host "Total Mailboxes Size(Gb): $([Math]::round($totalMbxSize/1024,2))"
+        Write-Host "Total Data Transferred(Gb): $([Math]::round($totalDataTransferred/1024,2))"
+        Write-Host "Move Quality: $([Math]::round($totalMbxSize/$totalDataTransferred,2)*100)%"
+        Write-Host "Move Performances (GB\h): $( [Math]::round((($totalDataTransferred/1024) / 
+                                                               ($InitialSeedingCompletedTimestamp - $StartTimestamp).Totalhours),2) )" 
+        Write-Host "____________________________________________________"
+        Write-Host " "
+    }
+        
+        $tt = $glob_InitialSeedingCompletedTimestamp - $glob_StartTimestamp
+    # global results
+    Write-Host " "
+    Write-Host "            Total migration performances" 
+    Write-Host "____________________________________________________"
+    Write-Host "First Start: $($glob_StartTimestamp)" 
+    Write-Host "Last Complete: $($glob_InitialSeedingCompletedTimestamp)"
+    Write-Host ("Time taken: {0}d.{1}h:{2}m:{3}s" -f $tt.days,$tt.hours,$tt.minutes,$tt.seconds )
+    Write-Host "Number of Mailboxes: $($migrations.count)" 
+    Write-Host "Total Mailboxes Size(GB): $([Math]::round($glob_totalMbxSize/1024,2))"
+    Write-Host "Total Data Transferred(GB): $([Math]::round($glob_totalDataTransferred/1024,2))"
+    Write-Host "Move Quality: $([Math]::round($glob_totalMbxSize/$glob_totalDataTransferred,2)*100)%"
+    Write-Host "Move Performances (GB\h): $([Math]::round( ($glob_totalDataTransferred/1024) /
+                                                           ((($glob_InitialSeedingCompletedTimestamp - $glob_StartTimestamp).Totalminutes)/60),2) )" 
+    Write-Host "____________________________________________________"
+
+    if ($ExportCSV){
+         $obj | Export-Csv -NoTypeInformatio -Path $CSVFile
+    }
+}
