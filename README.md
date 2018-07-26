@@ -23,7 +23,7 @@ If you want to analyze an offline file:
 Obtain the xml export of the batch to analyze from a live environment with:<br>
 <code>Get-MoveRequest -batchname "migrationservice:batchname"| Get-MoveRequestStatistics | export-clixml c:\temp\migrationExport.xml</code><br>
 
-Run the analysis against exported file:
+Run the analysis against exported file:<br>
 <code>Get-MigrationSpeed -$XMLinput -$XmlFileName [path]\migrationExport.xml</code><br>
 
 
@@ -65,3 +65,11 @@ Move Quality: 99%
 Move Performances (GB\h): 40.19
 ____________________________________________________
 ```
+
+## Versions
+
+### BETA
+
+* test in progress
+
+### 1.0.0.0
