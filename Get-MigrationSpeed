@@ -1,10 +1,21 @@
+<#
+	Script is in beta
+#>
 function Get-MigrationSpeed {
+    [cmdletbinding(
+        DefaultParameterSetName='liveNoexport'
+    )]
+
     param(
-        [Parameter(ParameterSetName='export')]
+        [Parameter(ParameterSetName='liveNoexport',Mandatory=$false)]
+            [switch] $LiveNoExport = $false,
+        [Parameter(ParameterSetName='export',Mandatory=$false)]
             [switch]$ExportCSV,
+        [Parameter(ParameterSetName='export',Mandatory=$false)]
             [string]$CSVFile = "./migration.csv",
-        [Parameter(ParameterSetName='inputfile')]
+        [Parameter(ParameterSetName='inputfile',Mandatory=$false)]
             [switch]$XMLInput,
+        [Parameter(ParameterSetName='inputfile',Mandatory=$false)]
             [string]$XmlFileName
     )
 
