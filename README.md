@@ -65,6 +65,7 @@ Move Quality: 99%
 Move Performances (GB\h): 40.19
 ____________________________________________________
 ```
+> (Note: if multiple onPremises server are used, there will be an entry for each one, the Total migration performance is about the full batch itself, despite the used server.
 
 ## Versions
 
