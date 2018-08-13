@@ -1,6 +1,75 @@
 <#
+    ###############Disclaimer#####################################################
+    The sample scripts are not supported under any Microsoft standard support 
+    program or service. The sample scripts are provided AS IS without warranty  
+    of any kind. Microsoft further disclaims all implied warranties including,  
+    without limitation, any implied warranties of merchantability or of fitness for 
+    a particular purpose. The entire risk arising out of the use or performance of  
+    the sample scripts and documentation remains with you. In no event shall 
+    Microsoft, its authors, or anyone else involved in the creation, production, or 
+    delivery of the scripts be liable for any damages whatsoever (including, 
+    without limitation, damages for loss of business profits, business interruption, 
+    loss of business information, or other pecuniary loss) arising out of the use 
+    of or inability to use the sample scripts or documentation, even if Microsoft 
+    has been advised of the possibility of such damages.
+    ###############Disclaimer#####################################################
+#>
+<#
 	Script is in beta
 #>
+<#       
+    .SYNOPSIS
+    Calculate the migration troughput during an Exchange hybrid migration, based on the 
+    initial FullSync.
+
+    .DESCRIPTION
+    Used to calculate the throughput of the initial FullSync operation for a migration
+    batch, on an Exchange hybrid migration.
+    Provide the calculation for the batch performance and for each MRSserver used onPremises
+
+    Allow to import an exported diagnostic for later processing
+    
+    Usage
+    load the function in PowerShell using
+    . .\Get-MigrationSpeed.ps1
+
+    then use the imported function using:
+    Get-MigrationSpeed [parameters]
+
+	Author: Francesco Poli fpoli@microsoft.com
+	
+    .PARAMETER ExportCSV
+    [ParameterSet] Export
+    If switch is passed in, the script expect a valid path and filename in CSVFile parameter
+    
+    .PARAMETER CSVFile
+    [ParameterSet] Export
+    A valid path and file filename where to save migration speed data.
+    If omitted, the file will be generated in the execution folder, with name ./migration.csv
+
+    .PARAMETER XMLInput
+    [ParameterSet] InputFile
+    If switch is passed in, the script expect a valid XML file in XmlFileName parameter
+      
+    .PARAMETER XmlFileName
+    [ParameterSet] InputFile
+    A valid export of a migration diagnostics taken with
+    Get-MoveRequest -BatchName "migrationservice:BatchName | Get-MoveRequestStatistics | Export-Clixml [path]\file.xml
+
+    .EXAMPLE
+    Get-MigrationSpeed
+
+    .EXAMPLE
+    Get-MigrationSpeed -ExportCSV -CSVFile c:\temp\export.csv
+
+    .EXAMPLE
+    Get-MigrationSpeed -XMLInput -XmlFileName c:\temp\data.xml 
+    
+    .EXAMPLE
+    Get-MigrationSpeed -ExportCSV -CSVFile c:\temp\export.csv -XMLInput -XmlFileName c:\temp\data.xml 
+
+#>
+
 function Get-MigrationSpeed {
     [cmdletbinding(
         DefaultParameterSetName='liveNoexport'
@@ -8,14 +77,14 @@ function Get-MigrationSpeed {
 
     param(
         [Parameter(ParameterSetName='liveNoexport',Mandatory=$false)]
-            [switch] $LiveNoExport = $false,
-        [Parameter(ParameterSetName='export',Mandatory=$false)]
+            [switch] $LiveNoExport = $true,
+        [Parameter(ParameterSetName='Export',Mandatory=$false)]
             [switch]$ExportCSV,
-        [Parameter(ParameterSetName='export',Mandatory=$false)]
-            [string]$CSVFile = "./migration.csv",
-        [Parameter(ParameterSetName='inputfile',Mandatory=$false)]
+        [Parameter(ParameterSetName='Export',Mandatory=$false)]
+            [string]$CSVFile = ".\migration.csv",
+        [Parameter(ParameterSetName='InputFile',Mandatory=$false)]
             [switch]$XMLInput,
-        [Parameter(ParameterSetName='inputfile',Mandatory=$false)]
+        [Parameter(ParameterSetName='InputFile',Mandatory=$false)]
             [string]$XmlFileName
     )
 
@@ -57,8 +126,22 @@ function Get-MigrationSpeed {
                         Get-MoveRequestStatistics
     }
     else {
-         $migrations = Import-Clixml $XmlFileName
+        if (Test-Path $XmlFileName) {
+            $migrations = Import-Clixml $XmlFileName
+        }
+        else{
+            Write-Host "XML file seems to not be valid, please check."
+            throw "XML file seems to not be valid, please check.";
+        }
     }
+
+    if ($ExportCSV) {
+        if ( !(Test-Path $CSVFile.Substring(0,$CSVFile.LastIndexOf("\") ) ) ){
+            Write-Host "Export csv path is invalid, please verify it"
+            Throw "Export csv path is invalid, please verify it"
+        }
+    }
+
     $SourceServers = $migrations | Select-Object SourceServer -Unique
     $glob_InitialSeedingCompletedTimestamp = 0
     $glob_StartTimestamp = 0
@@ -182,6 +265,7 @@ function Get-MigrationSpeed {
     Write-Host "____________________________________________________"
 
     if ($ExportCSV){
+        
          $obj | Export-Csv -NoTypeInformatio -Path $CSVFile
     }
 }
