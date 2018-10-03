@@ -2,10 +2,10 @@
 # Get-MigrationSpeed
 Analyze a migration batch for speed on Exchange Online (analyze the initial full sync phase)
 
-Usage:
-clone or download the file.
-dot source the script to import the function, like this:
-. ./Get-MigrationSpeed
+Usage:<br>
+Clone or download the file. <br>
+dot source the script to import the function, like this:<br>
+. ./Get-MigrationSpeed<br>
 
 ## Live analysis
 Using the script against a live environment:
