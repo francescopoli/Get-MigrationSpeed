@@ -5,7 +5,7 @@ Analyze a migration batch for speed on Exchange Online (analyze the initial full
 Usage:<br>
 Clone or download the file. <br>
 dot source the script to import the function, like this:<br>
-. ./Get-MigrationSpeed<br>
+<code>. ./Get-MigrationSpeed</code><br>
 
 ## Live analysis
 Using the script against a live environment:
