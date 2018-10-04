@@ -148,7 +148,8 @@ function Get-MigrationSpeed {
     $glob_totalMbxSize = 0
     $glob_totalDataTransferred = 0
     $glob_totalStalledTime = 0
-
+    
+    $obj = @()
     foreach($souS in $SourceServers){
         $migs = $migrations | where{$_.sourceServer -eq $souS.sourceserver}
         $StartTimestamp = 0
@@ -157,7 +158,7 @@ function Get-MigrationSpeed {
         $totalDataTransferred = 0
         $totalStalledTime
 
-        $obj = @()
+
         foreach($mig in $migs){
             #global start stop seeding
             if ( $glob_StartTimestamp -ne 0 ){ 
